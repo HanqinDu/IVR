@@ -21,11 +21,15 @@ class MainReacher():
         #Converts pixels into metres
         return np.array([(pixels[0]-self.env.viewerSize/2)/self.env.resolution,-(pixels[1]-self.env.viewerSize/2)/self.env.resolution])
 
+    def angle_(self, v1, v2):
+        output = (np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+        return output
+
     def detect_green(self,image_xy,image_xz):
         #In this method you should focus on detecting the center of the green circle
         #SAME AS DETECT_BLUE JUST WITH DIFFERENT COLOUR LIMITS
         mask_xy = cv2.inRange(image_xy, (55,5,0),(65,255,255))
-        mask_xz = cv2.inRange(image_xy, (55,5,0),(65,255,255))
+        mask_xz = cv2.inRange(image_xz, (55,5,0),(65,255,255))
         kernel = np.ones((5,5),np.uint8)
         mask_xy = cv2.dilate(mask_xy,kernel,iterations=3)
         mask_xz = cv2.dilate(mask_xz,kernel,iterations=3)
@@ -43,7 +47,7 @@ class MainReacher():
         #SAME AS DETECT_BLUE JUST WITH DIFFERENT COLOUR LIMITS
 
         mask_xy = cv2.inRange(image_xy, (115,5,0),(125,255,255))
-        mask_xz = cv2.inRange(image_xy, (115,5,0),(125,255,255))
+        mask_xz = cv2.inRange(image_xz, (115,5,0),(125,255,255))
         kernel = np.ones((5,5),np.uint8)
         mask_xy = cv2.dilate(mask_xy,kernel,iterations=3)
         mask_xz = cv2.dilate(mask_xz,kernel,iterations=3)
@@ -61,7 +65,7 @@ class MainReacher():
         #SAME AS DETECT_BLUE JUST WITH DIFFERENT COLOUR LIMITS
         mask_xy = cv2.inRange(image_xy, (0,5,(Vpeak*3/4)),(5,255,255))
         #mask_xy = mask_xy + cv2.inRange(image_xy, (170,0,0),(180,255,255))
-        mask_xz = cv2.inRange(image_xy, (0,5,(Vpeak*3/4)),(5,255,255))
+        mask_xz = cv2.inRange(image_xz, (0,5,(Vpeak*3/4)),(5,255,255))
         #mask_xz = mask_xz + cv2.inRange(image_xy, (170,0,0),(180,255,255))
         kernel = np.ones((5,5),np.uint8)
         mask_xy = cv2.dilate(mask_xy,kernel,iterations=3)
@@ -80,7 +84,7 @@ class MainReacher():
         #SAME AS DETECT_BLUE JUST WITH DIFFERENT COLOUR LIMITS
         mask_xy = cv2.inRange(image_xy, (0,5,0),(5,255,(Vpeak*3/4)))
         #mask_xy = mask_xy + cv2.inRange(image_xy, (170,0,0),(180,255,255))
-        mask_xz = cv2.inRange(image_xy, (0,5,0),(5,255,(Vpeak*3/4)))
+        mask_xz = cv2.inRange(image_xz, (0,5,0),(5,255,(Vpeak*3/4)))
         #mask_xz = mask_xz + cv2.inRange(image_xy, (170,0,0),(180,255,255))
         kernel = np.ones((5,5),np.uint8)
         mask_xy = cv2.dilate(mask_xy,kernel,iterations=3)
@@ -92,8 +96,33 @@ class MainReacher():
         cx = (int(M['m10']/M['m00']) + cx)/2
         cz = int(M['m01']/M['m00'])
 
+        cv2.imwrite("dblue.jpg",mask_xz)
+
         return self.coordinate_convert_3D(np.array([cx,cy,cz]))
+
+    def Jacobian(self,joint_angles):
+        #Forward Kinematics to calculate end effector location
+        #Each link is 1m long
+        #initialize matrix for jacobian
+        jacobian = np.zeros((4,4))
+        #obtain joint 1 cartesian location
+        j1_pos = np.zeros((3,1))
+        #obtain joint 2 cartesian location
+        j2_pos = np.array([np.cos(joint_angles[0]),0,np.sin(joint_angles[0])])
+        #obtain joint 3 cartesian location
+        j3_pos = j2_pos + np.array([np.cos(joint_angles[1]),np.sin(joint_angles[1]),0])
+        #obtain joint 4 cartesian locatio
+        j4_pos = j3_pos + np.array([np.cos(joint_angles[2]),np.sin(joint_angles[2]),j3_pos[2]])
+        #obtain end effector cartesian location
+        ee_pos = j4_pos + np.array([np.cos(joint_angles[3]),0,np.sin(joint_angles[3])])
+
+        #print(self.env.ground_truth_end_effector)
+
+        return
+
+
     #By Du
+
 
     #By eris
     def detect_joint_angles(self,image_xy,image_xz,Vpeak):
@@ -103,18 +132,20 @@ class MainReacher():
         jointPos2 = self.detect_green(image_xy,image_xz)
         jointPos3 = self.detect_blue(image_xy,image_xz,Vpeak)
         jointPos4 = self.detect_dblue(image_xy,image_xz,Vpeak)
+
+        #print(jointPos4)
         #Solve using trigonometry
-        ja1_xy = math.atan2(jointPos1[1],jointPos1[0])
+        ja1 = self.angle_(jointPos1,np.array([1,0,0]))
+        ja2 = self.angle_(jointPos2-jointPos1,jointPos1)
+        ja3 = self.angle_(jointPos3-jointPos2,jointPos2-jointPos1)
+        ja4 = self.angle_(jointPos4-jointPos3,jointPos3-jointPos2)
 
-        ja2_xz = math.atan2(jointPos1[2],jointPos1[0])
+        ja1 = self.angle_normalize(ja1)
+        ja2 = self.angle_normalize(ja2)
+        ja3 = self.angle_normalize(ja3)
+        ja4 = self.angle_normalize(ja4)
 
-        ja3_xz = math.atan2(jointPos3[2]-jointPos2[2],jointPos3[0]-jointPos2[0])-ja2_xz
-        ja3_xz = self.angle_normalize(ja3_xz)
-
-        ja4_xy = math.atan2(jointPos4[1]-jointPos3[1],jointPos4[0]-jointPos3[0])-ja1_xy
-        ja4_xy = self.angle_normalize(ja4_xy)
-
-        return np.array([ja1_xy,ja2_xz,ja3_xz,ja4_xy])
+        return np.array([ja1,ja2,ja3,ja4])
 
     def angle_normalize(self,x):
         #Normalizes the angle between pi and -pi
@@ -156,37 +187,40 @@ class MainReacher():
             arrxz_HSV = cv2.cvtColor(arrxz, cv2.COLOR_BGR2HSV)
 
             img_hist=cv2.calcHist([arrxy],[2],None,[256],[0,256])
-
             Vpeak = np.argmax(img_hist)
 
-            jointPos1 = self.detect_red(arrxy_HSV,arrxz_HSV)
-            jointPos2 = self.detect_green(arrxy_HSV,arrxz_HSV)
-            jointPos3 = self.detect_blue(arrxy_HSV,arrxz_HSV,Vpeak)
-            jointPos4 = self.detect_dblue(arrxy_HSV,arrxz_HSV,Vpeak)
-
             detectedJointAngles = self.detect_joint_angles(arrxy_HSV,arrxz_HSV,Vpeak)
+            print(self.env.ground_truth_joint_angles - detectedJointAngles)
 
             #velocity part [eris]
             #The change in time between iterations can be found in the self.env.dt variable
-            prev_JAs = np.zeros(4)
-            dt = self.env.dt
-            desiredJointAngles = np.array([-2*np.pi/3, np.pi/4, -np.pi/4, np.pi])
 
-            detectedJointVels = self.angle_normalize(detectedJointAngles - prev_JAs)/dt
-            prev_JAs = detectedJointAngles
-            self.env.step((detectedJointAngles,detectedJointVels,desiredJointAngles,np.zeros(4)))
-            print(self.env.ground_truth_joint_velocities - detectedJointVels)
+            # -------------------------------------------------------------------
+            #prev_JAs = np.zeros(4)
+            #dt = self.env.dt
+            #desiredJointAngles = np.array([-2*np.pi/3, np.pi/4, -np.pi/4, np.pi])
+
+            #detectedJointVels = self.angle_normalize(detectedJointAngles - prev_JAs)/dt
+            #prev_JAs = detectedJointAngles
+            #self.env.step((detectedJointAngles,detectedJointVels,desiredJointAngles,np.zeros(4)))
+
+            #print(self.env.ground_truth_joint_velocities - detectedJointVels)
+
+            # --------------------------------------------------------
             #velocity end
 
             # test
 
             #cv2.imwrite("arrxy.jpg",arrxy)
 
+
             # Etest
 
             #jointAngles = np.array([0.5,0.5,0.5,-0.5])#####du
 
-            #self.env.step((np.zeros(4),np.zeros(4),jointAngles, np.zeros(4)))######du
+            jointAngles = np.array([1.5,1.5,1.5,1.5])#####du
+
+            self.env.step((np.zeros(4),np.zeros(4),jointAngles, np.zeros(4)))######du
 
             #self.env.step((np.zeros(4),np.zeros(4),np.zeros(4), np.zeros(4)))
             #The step method will send the control input to the robot, the parameters are as follows: (Current Joint Angles/Error, Current Joint Velocities, Desired Joint Angles, Torque input)
