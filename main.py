@@ -79,7 +79,7 @@ class MainReacher():
 
         return self.coordinate_convert_3D(np.array([cx,cy,cz]))
 
-    def detect_dblue(self,image_xy,image_xz,Vpeak):
+    def detect_ee(self,image_xy,image_xz,Vpeak):
         #In this method you should focus on detecting the center of the green circle
         #SAME AS DETECT_BLUE JUST WITH DIFFERENT COLOUR LIMITS
         mask_xy = cv2.inRange(image_xy, (0,5,0),(5,255,(Vpeak*3/4)))
@@ -96,54 +96,137 @@ class MainReacher():
         cx = (int(M['m10']/M['m00']) + cx)/2
         cz = int(M['m01']/M['m00'])
 
-        cv2.imwrite("dblue.jpg",mask_xz)
-
         return self.coordinate_convert_3D(np.array([cx,cy,cz]))
+
+    def FK(self,joint_angles):
+        #Forward Kinematics to calculate end effector location
+        #Each link is 1m long
+        #calculate each individual jacobian transform
+        j1_transform = self.link_transform_y(joint_angles[0])
+        j2_transform = self.link_transform_z(joint_angles[1])
+        j3_transform = self.link_transform_z(joint_angles[2])
+        j4_transform = self.link_transform_y(joint_angles[3])
+        #combine the transforms for each
+        total_transform = j1_transform*j2_transform*j3_transform*j4_transform
+        return total_transform
+
+    def IK(self, current_joint_angles, desired_position):
+        #Calculate current position and error in position in task space
+        curr_pos = self.FK(current_joint_angles)[0:3,3]
+        pos_error = desired_position - np.squeeze(np.array(curr_pos.T))
+        #Calculate Jacobian
+        Jac = np.matrix(self.Jacobian_analytic(current_joint_angles))[0:3,:]
+        Jac_inv = Jac.T
+        #If the Jacobian is low rank (<2) then use the transpose otherwise use psuedo-inverse
+        if(np.linalg.matrix_rank(Jac,0.4)<2):
+            Jac_inv = Jac.T
+        else:
+            Jac_inv = Jac.T*np.linalg.inv(Jac*Jac.T)
+        #Apply inverted jacobian on the position error in task space to get qdot
+        q_dot = Jac_inv*np.matrix(pos_error).T
+        return np.squeeze(np.array(q_dot.T))
+
+    def link_transform_z(self,angle):
+        #Calculate the Homogenoeous transformation matrix from rotation and translation
+        return np.matrix([[np.cos(angle),-np.sin(angle),0,np.cos(angle)],
+                          [np.sin(angle), np.cos(angle),0,np.sin(angle)],
+                          [0,0,1,0],
+                          [0,0,0,1]])
+
+    def link_transform_y(self,angle):
+        #Calculate the Homogenoeous transformation matrix from rotation and translation
+        return np.matrix([[np.cos(angle),0,-np.sin(angle),np.cos(angle)],
+                          [0,1,0,0],
+                          [np.sin(angle),0,np.cos(angle),np.sin(angle)],
+                          [0,0,0,1]])
 
     def Jacobian(self,joint_angles):
         #Forward Kinematics to calculate end effector location
         #Each link is 1m long
         #initialize matrix for jacobian
         jacobian = np.zeros((4,4))
+        #calculate each individual jacobian transform
+        j1_transform = self.link_transform_y(joint_angles[0])
+        j2_transform = self.link_transform_z(joint_angles[1])
+        j3_transform = self.link_transform_z(joint_angles[2])
+        j4_transform = self.link_transform_y(joint_angles[3])
+        #combine the transforms for each
+        total_transform = j1_transform*j2_transform*j3_transform*j4_transform
+        #obtain end effector cartesian location
+
+        ee_pos = total_transform[0:3,3]
+
+        print(total_transform)
+        print(self.env.ground_truth_end_effector)
+
+        #obtain joint 4 cartesian location
+        j4_pos = (j1_transform*j2_transform*j3_transform)[0:3,3]
+        #obtain joint 3 cartesian location
+        j3_pos = (j1_transform*j2_transform)[0:3,3]
+        #obtain joint 2 cartesian location
+        j2_pos = (j1_transform)[0:3,3]
         #obtain joint 1 cartesian location
         j1_pos = np.zeros((3,1))
-        #obtain joint 2 cartesian location
-        j2_pos = np.array([np.cos(joint_angles[0]),0,np.sin(joint_angles[0])])
-        #obtain joint 3 cartesian location
-        j3_pos = j2_pos + np.array([np.cos(joint_angles[1]),np.sin(joint_angles[1]),0])
-        #obtain joint 4 cartesian locatio
-        j4_pos = j3_pos + np.array([np.cos(joint_angles[2]),np.sin(joint_angles[2]),j3_pos[2]])
-        #obtain end effector cartesian location
-        ee_pos = j4_pos + np.array([np.cos(joint_angles[3]),0,np.sin(joint_angles[3])])
+        #Initialize vector containing axis of rotation, for planar robots rotating around z this is constant
+        z_vector = np.array([0,0,1])
+        y_vector = np.array([0,1,0])
+        #Calculate geometric jacobian using equations
+        pos_3D = np.zeros(3)
 
-        #print(self.env.ground_truth_end_effector)
+        pos_3D[0:3] = (ee_pos-j1_pos).T
+        jacobian[0:3,0] = np.cross(y_vector,pos_3D)[0:3]
+        pos_3D[0:3] = (ee_pos-j2_pos).T
+        jacobian[0:3,1] = np.cross(z_vector,pos_3D)[0:3]
+        pos_3D[0:3] = (ee_pos-j3_pos).T
+        jacobian[0:3,2] = np.cross(z_vector,pos_3D)[0:3]
+        pos_3D[0:3] = (ee_pos-j4_pos).T
+        jacobian[0:3,3] = np.cross(y_vector,pos_3D)[0:3]
+        jacobian[3,:] = 1
 
-        return
+        return jacobian
 
+    def rotation_matrix_z(self, angle):
+        return np.matrix([[np.cos(angle),-np.sin(angle),0],
+                          [np.sin(angle),np.cos(angle),0],
+                          [0,0,1]])
+
+    def rotation_matrix_x(self, angle):
+        return np.matrix([[1,0,0],
+                          [0,np.cos(angle),-np.sin(angle)],
+                          [0,np.sin(angle),np.cos(angle)]])
+
+    def rotation_matrix_y(self, angle):
+        return np.matrix([[np.cos(angle),0,np.sin(angle)],
+                          [0,1,0],
+                          [-np.sin(angle),0,np.cos(angle)]])
 
     #By Du
-
 
     #By eris
     def detect_joint_angles(self,image_xy,image_xz,Vpeak):
         #Calculate the relevant joint angles from the image
         #Obtain the center of each coloured blob(red green blue dblue)
-        jointPos1 = self.detect_red(image_xy,image_xz)
-        jointPos2 = self.detect_green(image_xy,image_xz)
-        jointPos3 = self.detect_blue(image_xy,image_xz,Vpeak)
-        jointPos4 = self.detect_dblue(image_xy,image_xz,Vpeak)
+        jointPos1 = (self.detect_red(image_xy,image_xz))
+        jointPos2 = (self.detect_green(image_xy,image_xz))
+        jointPos3 = (self.detect_blue(image_xy,image_xz,Vpeak))
+        jointPos4 = (self.detect_ee(image_xy,image_xz,Vpeak))
 
         #print(jointPos4)
         #Solve using trigonometry
-        ja1 = self.angle_(jointPos1,np.array([1,0,0]))
-        ja2 = self.angle_(jointPos2-jointPos1,jointPos1)
-        ja3 = self.angle_(jointPos3-jointPos2,jointPos2-jointPos1)
-        ja4 = self.angle_(jointPos4-jointPos3,jointPos3-jointPos2)
-
-        ja1 = self.angle_normalize(ja1)
+        ja1 = math.atan2(jointPos1[2],jointPos1[0])
+        jointPos2 = (jointPos2*self.rotation_matrix_y(-ja1)).T
+        jointPos3 = (jointPos3*self.rotation_matrix_y(-ja1)).T
+        jointPos4 = (jointPos4*self.rotation_matrix_y(-ja1)).T
+        ja2 = math.atan2(jointPos2[1]-jointPos1[1],jointPos2[0]-jointPos1[0])
         ja2 = self.angle_normalize(ja2)
+        jointPos3 = (self.rotation_matrix_z(-ja2)*jointPos3)
+        jointPos4 = (self.rotation_matrix_z(-ja2)*jointPos4)
+        ja3 = math.atan2(jointPos3[1]-jointPos2[1],jointPos3[0]-jointPos2[0])
         ja3 = self.angle_normalize(ja3)
+        jointPos4 = (self.rotation_matrix_z(-ja3)*jointPos4)
+        ja4 = math.atan2(jointPos4[1]-jointPos3[1],jointPos4[0]-jointPos3[0])
         ja4 = self.angle_normalize(ja4)
+
 
         return np.array([ja1,ja2,ja3,ja4])
 
@@ -172,13 +255,15 @@ class MainReacher():
         # self.env.world.setGravity((0,0,-9.81))
 
         # test
-        thresholds=np.zeros([3])
+        prev_JAs = np.zeros(4)
+        prev_jvs = collections.deque(np.zeros(4),1)
 
         for loop in range(100000):
 
             #self.env.render returns 2 RGB arrays of the robot, one for the xy-plane, and one for the xz-plane
             arrxy,arrxz = self.env.render('rgb-array')
 
+            dt = self.env.dt
 
             # D: calculate joint position
             # Hue range is [0,179], Saturation range is [0,255] and Value range is [0,255].
@@ -190,7 +275,6 @@ class MainReacher():
             Vpeak = np.argmax(img_hist)
 
             detectedJointAngles = self.detect_joint_angles(arrxy_HSV,arrxz_HSV,Vpeak)
-            print(self.env.ground_truth_joint_angles - detectedJointAngles)
 
             #velocity part [eris]
             #The change in time between iterations can be found in the self.env.dt variable
@@ -213,12 +297,17 @@ class MainReacher():
 
             #cv2.imwrite("arrxy.jpg",arrxy)
 
+            #test = (self.Jacobian(self.env.ground_truth_joint_angles))
+
+            print(detectedJointAngles)
+            print(self.env.ground_truth_joint_angles)
+            #self.Jacobian(detectedJointAngles)
 
             # Etest
 
-            #jointAngles = np.array([0.5,0.5,0.5,-0.5])#####du
+            jointAngles = np.array([-1.2,0.1,-0.7,2.2])#####du
 
-            jointAngles = np.array([1.5,1.5,1.5,1.5])#####du
+            #jointAngles = np.array([1.5,1.5,1.5,1.5])#####du
 
             self.env.step((np.zeros(4),np.zeros(4),jointAngles, np.zeros(4)))######du
 
