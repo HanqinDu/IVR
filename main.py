@@ -144,8 +144,7 @@ class MainReacher():
         thresholds=np.zeros([3])
 
         for loop in range(100000):
-            #The change in time between iterations can be found in the self.env.dt variable
-            dt = self.env.dt
+
             #self.env.render returns 2 RGB arrays of the robot, one for the xy-plane, and one for the xz-plane
             arrxy,arrxz = self.env.render('rgb-array')
 
@@ -166,15 +165,29 @@ class MainReacher():
             jointPos4 = self.detect_dblue(arrxy_HSV,arrxz_HSV,Vpeak)
 
             detectedJointAngles = self.detect_joint_angles(arrxy_HSV,arrxz_HSV,Vpeak)
+
+            #velocity part [eris]
+            #The change in time between iterations can be found in the self.env.dt variable
+            prev_JAs = np.zeros(4)
+            dt = self.env.dt
+            desiredJointAngles = np.array([-2*np.pi/3, np.pi/4, -np.pi/4, np.pi])
+
+            detectedJointVels = self.angle_normalize(detectedJointAngles - prev_JAs)/dt
+            prev_JAs = detectedJointAngles
+            self.env.step((detectedJointAngles,detectedJointVels,desiredJointAngles,np.zeros(4)))
+            print(self.env.ground_truth_joint_velocities - detectedJointVels)
+            #velocity end
+
             # test
 
             #cv2.imwrite("arrxy.jpg",arrxy)
 
             # Etest
 
-            jointAngles = np.array([0.5,0.5,0.5,-0.5])
+            #jointAngles = np.array([0.5,0.5,0.5,-0.5])#####du
 
-            self.env.step((np.zeros(4),np.zeros(4),jointAngles, np.zeros(4)))
+            #self.env.step((np.zeros(4),np.zeros(4),jointAngles, np.zeros(4)))######du
+
             #self.env.step((np.zeros(4),np.zeros(4),np.zeros(4), np.zeros(4)))
             #The step method will send the control input to the robot, the parameters are as follows: (Current Joint Angles/Error, Current Joint Velocities, Desired Joint Angles, Torque input)
 
