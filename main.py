@@ -12,6 +12,7 @@ class MainReacher():
         self.env = gym.make('3DReacherMy-v0')
         self.env.reset()
 
+    #By Du
     def coordinate_convert_3D(self,pixels):
         #Converts pixels into metres
         return np.array([(pixels[0]-self.env.viewerSize/2)/self.env.resolution,-(pixels[1]-self.env.viewerSize/2)/self.env.resolution,-(pixels[2]-self.env.viewerSize/2)/self.env.resolution])
@@ -92,6 +93,33 @@ class MainReacher():
         cz = int(M['m01']/M['m00'])
 
         return self.coordinate_convert_3D(np.array([cx,cy,cz]))
+    #By Du
+
+    #By eris
+    def detect_joint_angles(self,image_xy,image_xz,Vpeak):
+        #Calculate the relevant joint angles from the image
+        #Obtain the center of each coloured blob(red green blue dblue)
+        jointPos1 = self.detect_red(image_xy,image_xz)
+        jointPos2 = self.detect_green(image_xy,image_xz)
+        jointPos3 = self.detect_blue(image_xy,image_xz,Vpeak)
+        jointPos4 = self.detect_dblue(image_xy,image_xz,Vpeak)
+        #Solve using trigonometry
+        ja1_xy = math.atan2(jointPos1[1],jointPos1[0])
+
+        ja2_xz = math.atan2(jointPos1[2],jointPos1[0])
+
+        ja3_xz = math.atan2(jointPos3[2]-jointPos2[2],jointPos3[0]-jointPos2[0])-ja2_xz
+        ja3_xz = self.angle_normalize(ja3_xz)
+
+        ja4_xy = math.atan2(jointPos4[1]-jointPos3[1],jointPos4[0]-jointPos3[0])-ja1_xy
+        ja4_xy = self.angle_normalize(ja4_xy)
+
+        return np.array([ja1_xy,ja2_xz,ja3_xz,ja4_xy])
+
+    def angle_normalize(self,x):
+        #Normalizes the angle between pi and -pi
+        return (((x+np.pi) % (2*np.pi)) - np.pi)
+    #By eris
 
 
 
@@ -137,7 +165,7 @@ class MainReacher():
             jointPos3 = self.detect_blue(arrxy_HSV,arrxz_HSV,Vpeak)
             jointPos4 = self.detect_dblue(arrxy_HSV,arrxz_HSV,Vpeak)
 
-
+            detectedJointAngles = self.detect_joint_angles(arrxy_HSV,arrxz_HSV,Vpeak)
             # test
 
             #cv2.imwrite("arrxy.jpg",arrxy)
