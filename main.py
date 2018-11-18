@@ -156,9 +156,6 @@ class MainReacher():
 
         ee_pos = total_transform[0:3,3]
 
-        print(total_transform)
-        print(self.env.ground_truth_end_effector)
-
         #obtain joint 4 cartesian location
         j4_pos = (j1_transform*j2_transform*j3_transform)[0:3,3]
         #obtain joint 3 cartesian location
@@ -211,6 +208,11 @@ class MainReacher():
         jointPos3 = (self.detect_blue(image_xy,image_xz,Vpeak))
         jointPos4 = (self.detect_ee(image_xy,image_xz,Vpeak))
 
+        ja1_a = self.angle_(jointPos1,np.array([1,0,0]))
+        ja2_a = self.angle_(jointPos2-jointPos1,jointPos1)
+        ja3_a = self.angle_(jointPos3-jointPos2,jointPos2-jointPos1)
+        ja4_a = self.angle_(jointPos4-jointPos3,jointPos3-jointPos2)
+
         #print(jointPos4)
         #Solve using trigonometry
         ja1 = math.atan2(jointPos1[2],jointPos1[0])
@@ -227,8 +229,16 @@ class MainReacher():
         ja4 = math.atan2(jointPos4[1]-jointPos3[1],jointPos4[0]-jointPos3[0])
         ja4 = self.angle_normalize(ja4)
 
+        if(ja1 < 0):
+            ja1_a = -ja1_a
+        if(ja2 < 0):
+            ja2_b = -ja2_a
+        if(ja3 < 0):
+            ja3_a = -ja3_a
+        if(ja4 < 0):
+            ja4_b = -ja4_a
 
-        return np.array([ja1,ja2,ja3,ja4])
+        return np.array([ja1_a,ja2_a,ja3_a,ja4_a])
 
     def angle_normalize(self,x):
         #Normalizes the angle between pi and -pi
