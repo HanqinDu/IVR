@@ -111,10 +111,10 @@ class MainReacher():
         cxz2 = np.reshape(np.mean(countour_XZ[1],0,dtype = np.int),2)
 
 
-        for i in range(5):
-            for j in range(5):
-                if(mask_xy[cxy1[1]+i][cxy1[0]+j] != mask_xy[cxy2[1]+i][cxy2[0]+j]):
-                    if(mask_xy[cxy1[1]+i][cxy1[0]+j] < mask_xy[cxy2[1]+i][cxy2[0]+j]):
+        for i in range(10):
+            for j in range(10):
+                if(mask_xy[cxy1[1]+i-5][cxy1[0]+j-5] != mask_xy[cxy2[1]+i-5][cxy2[0]+j-5]):
+                    if(mask_xy[cxy1[1]+i-5][cxy1[0]+j-5] < mask_xy[cxy2[1]+i-5][cxy2[0]+j-5]):
                         target_x = cxy1[0]
                         target_y = cxy1[1]
                         i = 10
@@ -123,10 +123,10 @@ class MainReacher():
                         target_y = cxy2[1]
                         j = 10
 
-        for i in range(5):
-            for j in range(5):
-                if(mask_xz[cxz1[1]+i][cxz1[0]+j] != mask_xz[cxz2[1]+i][cxz2[0]+j]):
-                    if(mask_xz[cxz1[1]+i][cxz1[0]+j] < mask_xz[cxz2[1]+i][cxz2[0]+j]):
+        for i in range(10):
+            for j in range(10):
+                if(mask_xz[cxz1[1]+i-5][cxz1[0]+j-5] != mask_xz[cxz2[1]+i-5][cxz2[0]+j-5]):
+                    if(mask_xz[cxz1[1]+i-5][cxz1[0]+j-5] < mask_xz[cxz2[1]+i-5][cxz2[0]+j-5]):
                         target_x = (cxz1[0] + target_x)/2
                         target_z = cxz1[1]
                         i = 10
@@ -134,8 +134,6 @@ class MainReacher():
                         target_x = (cxz2[0] + target_x)/2
                         target_z = cxz2[1]
                         j = 10
-
-        print(self.coordinate_convert_3D(np.array([target_x,target_y,target_z])))
 
         return self.coordinate_convert_3D(np.array([target_x,target_y,target_z]))
 
