@@ -7,10 +7,24 @@ import math
 import scipy as sp
 import collections
 import time
+import classifier
+
+
+
 class MainReacher():
+#    def __init__(self):
+#        self.env = gym.make('3DReacherMy-v0')
+#        self.env.reset()
+#for target classifier [eris]
     def __init__(self):
+        #original
         self.env = gym.make('3DReacherMy-v0')
         self.env.reset()
+
+    ##By eris
+    def image_normalize(self,image):
+        image = cv2.normalize(image,None,0,255,cv2.NORM_MINMAX)
+        return image
 
     #By Du
     def coordinate_convert_3D(self,pixels):
@@ -197,55 +211,110 @@ class MainReacher():
                           [0,1,0],
                           [-np.sin(angle),0,np.cos(angle)]])
 
-    #By Du
+#By Du
+
 
     #By eris
     def detect_joint_angles(self,image_xy,image_xz,Vpeak):
         #Calculate the relevant joint angles from the image
         #Obtain the center of each coloured blob(red green blue dblue)
-        jointPos1 = (self.detect_red(image_xy,image_xz))
-        jointPos2 = (self.detect_green(image_xy,image_xz))
-        jointPos3 = (self.detect_blue(image_xy,image_xz,Vpeak))
-        jointPos4 = (self.detect_ee(image_xy,image_xz,Vpeak))
-
-        ja1_a = self.angle_(jointPos1,np.array([1,0,0]))
-        ja2_a = self.angle_(jointPos2-jointPos1,jointPos1)
-        ja3_a = self.angle_(jointPos3-jointPos2,jointPos2-jointPos1)
-        ja4_a = self.angle_(jointPos4-jointPos3,jointPos3-jointPos2)
+        jointPos1 = self.detect_red(image_xy,image_xz)
+        jointPos2 = self.detect_green(image_xy,image_xz)
+        jointPos3 = self.detect_blue(image_xy,image_xz,Vpeak)
+        jointPos4 = self.detect_ee(image_xy,image_xz,Vpeak)
 
         #print(jointPos4)
         #Solve using trigonometry
-        ja1 = math.atan2(jointPos1[2],jointPos1[0])
-        jointPos2 = (jointPos2*self.rotation_matrix_y(-ja1)).T
-        jointPos3 = (jointPos3*self.rotation_matrix_y(-ja1)).T
-        jointPos4 = (jointPos4*self.rotation_matrix_y(-ja1)).T
-        ja2 = math.atan2(jointPos2[1]-jointPos1[1],jointPos2[0]-jointPos1[0])
+        ja1 = self.angle_(jointPos1,np.array([1,0,0]))
+        ja2 = self.angle_(jointPos2-jointPos1,jointPos1)
+        ja3 = self.angle_(jointPos3-jointPos2,jointPos2-jointPos1)
+        ja4 = self.angle_(jointPos4-jointPos3,jointPos3-jointPos2)
+
+        ja1 = self.angle_normalize(ja1)
         ja2 = self.angle_normalize(ja2)
-        jointPos3 = (self.rotation_matrix_z(-ja2)*jointPos3)
-        jointPos4 = (self.rotation_matrix_z(-ja2)*jointPos4)
-        ja3 = math.atan2(jointPos3[1]-jointPos2[1],jointPos3[0]-jointPos2[0])
         ja3 = self.angle_normalize(ja3)
-        jointPos4 = (self.rotation_matrix_z(-ja3)*jointPos4)
-        ja4 = math.atan2(jointPos4[1]-jointPos3[1],jointPos4[0]-jointPos3[0])
         ja4 = self.angle_normalize(ja4)
 
-        if(ja1 < 0):
-            ja1_a = -ja1_a
-        if(ja2 < 0):
-            ja2_b = -ja2_a
-        if(ja3 < 0):
-            ja3_a = -ja3_a
-        if(ja4 < 0):
-            ja4_b = -ja4_a
-
-        return np.array([ja1_a,ja2_a,ja3_a,ja4_a])
+        return np.array([ja1,ja2,ja3,ja4])
 
     def angle_normalize(self,x):
         #Normalizes the angle between pi and -pi
         return (((x+np.pi) % (2*np.pi)) - np.pi)
-    #By eris
+#detect target by eris
+
+    def detect_target(self,image_xy,image_xz,classifier):
+        #Detect the center of the target circle (Colour: [200,200,200])
+        #SAME AS DETECT_BLUE JUST WITH DIFFERENT COLOUR LIMITS
+
+        kernel = np.ones((5,5),np.uint8)
+        #image_xy
+        mask_xy = cv2.inRange(image_xy,(170,170,170),(189,189,189))#178.5 target
+        mask_xy = cv2.dilate(mask_xy,kernel,iterations=3)
+        M_xy = cv2.moments(mask_xy)
+        #use findCountours to find center
+        imgXY,countour_XY, _ = cv2.findContours(mask_xy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        cxy1 = np.reshape(np.mean(countour_XY[0],0,dtype = np.int),2)
+        cxy2 = np.reshape(np.mean(countour_XY[1],0,dtype = np.int),2)
+
+        #image_xz
+        mask_xz = cv2.inRange(image_xz,(170,170,170),(189,189,189))#178.5 target
+        mask_xz = cv2.dilate(mask_xz,kernel,iterations=3)
+        M_xz = cv2.moments(mask_xz)
+        #use findCountours to find center
+        imgXZ,countour_XZ, _ = cv2.findContours(mask_xz, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        cxz1 = np.reshape(np.mean(countour_XZ[0],0,dtype = np.int),2)
+        cxz2 = np.reshape(np.mean(countour_XZ[1],0,dtype = np.int),2)
+
+        #to form each coordinate
+        XY1 = self.coordinate_convert(cxy1)
+        XY2 = self.coordinate_convert(cxy2)
+        XZ1 = self.coordinate_convert(cxz1)
+        XZ2 = self.coordinate_convert(cxz2)
+
+        target1 = np.array([XY1[0],XY1[1],XZ1[1]])
+        target2 = np.array([XY2[0],XY2[1],XZ2[1]])
+
+        right=cxy1[0]+20
+    	if right>np.shape(mask_xy)[1]:
+    		right=np.shape(mask_xy)[1]
+    	left=cxy1[0]-20
+    	if left<0:
+    		left=0
+    	down=cxy1[1]+20
+    	if down>np.shape(mask_xy)[0]:
+    		down=np.shape(mask_xy)[0]
+    	up=cxy1[1]-20
+    	if up<0:
+    		up=0
+
+        test_img=mask_xy[up:down, left:right]
+    	cv2.imwrite('test.jpg', test_img)
+    	cv2.waitKey(0)
 
 
+        _, pred = classifier.classify('test.jpg')
+        pred = pred[0][0]
+
+        if (pred ==0):
+            return (target1,target2)
+        else:
+            return (target2,target1)
+    #By eris end
+
+    #Gravity by eris
+    def grav(self, current_joint_angles):##gai
+        # Gravitational acceleration and mass
+        g = 9.81
+        m = 1
+        # Opposite torque from gravity in link 1
+        t1 = 5*m*g/2*math.cos(current_joint_angles[0]) + 3*m*g/2*math.cos(current_joint_angles[0] + current_joint_angles[1]) + m*g/2*math.cos(current_joint_angles[0] + current_joint_angles[1] + current_joint_angles[2])
+        # Opposite torque from gravity in link 2
+        t2 = 3*m*g/2*math.cos(current_joint_angles[0] + current_joint_angles[1]) + m*g/2*math.cos(current_joint_angles[0] + current_joint_angles[1] + current_joint_angles[2])
+        # Opposite torque from gravity in link 3
+        t3 = m*g/2*math.cos(current_joint_angles[0] + current_joint_angles[1] + current_joint_angles[2])
+        return np.matrix([t1, t2, t3]).T
+    #gravity eris
 
     def go(self):
         #The robot has several simulated modes:
@@ -265,15 +334,20 @@ class MainReacher():
         # self.env.world.setGravity((0,0,-9.81))
 
         # test
-        prev_JAs = np.zeros(4)
-        prev_jvs = collections.deque(np.zeros(4),1)
+        thresholds=np.zeros([3])
+
+
+        #detect target eris
+        test_classifier = classifier.main()
+
+        #end target
+
 
         for loop in range(100000):
 
             #self.env.render returns 2 RGB arrays of the robot, one for the xy-plane, and one for the xz-plane
             arrxy,arrxz = self.env.render('rgb-array')
 
-            dt = self.env.dt
 
             # D: calculate joint position
             # Hue range is [0,179], Saturation range is [0,255] and Value range is [0,255].
@@ -281,43 +355,39 @@ class MainReacher():
             arrxy_HSV = cv2.cvtColor(arrxy, cv2.COLOR_BGR2HSV)
             arrxz_HSV = cv2.cvtColor(arrxz, cv2.COLOR_BGR2HSV)
 
+            norm_image_xy = self.image_normalize(arrxy)#####
+            norm_image_xz = self.image_normalize(arrxz)
+            #target
+            self.detect_target(norm_image_xy,norm_image_xz,test_classifier)
+
             img_hist=cv2.calcHist([arrxy],[2],None,[256],[0,256])
             Vpeak = np.argmax(img_hist)
 
             detectedJointAngles = self.detect_joint_angles(arrxy_HSV,arrxz_HSV,Vpeak)
+            #print(self.env.ground_truth_joint_angles - detectedJointAngles)
 
             #velocity part [eris]
             #The change in time between iterations can be found in the self.env.dt variable
 
             # -------------------------------------------------------------------
-            #prev_JAs = np.zeros(4)
-            #dt = self.env.dt
-            #desiredJointAngles = np.array([-2*np.pi/3, np.pi/4, -np.pi/4, np.pi])
+            prev_JAs = np.zeros(4)
+            dt = self.env.dt
+            desiredJointAngles = np.array([-2*np.pi/3, np.pi/4, -np.pi/4, np.pi])
 
-            #detectedJointVels = self.angle_normalize(detectedJointAngles - prev_JAs)/dt
-            #prev_JAs = detectedJointAngles
-            #self.env.step((detectedJointAngles,detectedJointVels,desiredJointAngles,np.zeros(4)))
+            detectedJointVels = self.angle_normalize(detectedJointAngles - prev_JAs)/dt
+            prev_JAs = detectedJointAngles
 
-            #print(self.env.ground_truth_joint_velocities - detectedJointVels)
+            self.env.step((detectedJointAngles,detectedJointVels,desiredJointAngles,np.zeros(4)))
+
+
 
             # --------------------------------------------------------
             #velocity end
 
-            # test
 
-            #cv2.imwrite("arrxy.jpg",arrxy)
+            #jointAngles = np.array([0.5,0.5,0.5,-0.5])#####du
 
-            #test = (self.Jacobian(self.env.ground_truth_joint_angles))
-
-            print(detectedJointAngles)
-            print(self.env.ground_truth_joint_angles)
-            #self.Jacobian(detectedJointAngles)
-
-            # Etest
-
-            jointAngles = np.array([-1.2,0.1,-0.7,2.2])#####du
-
-            #jointAngles = np.array([1.5,1.5,1.5,1.5])#####du
+            jointAngles = np.array([1.5,1.5,1.5,1.5])#####du
 
             self.env.step((np.zeros(4),np.zeros(4),jointAngles, np.zeros(4)))######du
 
@@ -328,6 +398,9 @@ class MainReacher():
 def main():
     reach = MainReacher()
     reach.go()
+
+
+
 
 if __name__ == "__main__":
     main()
