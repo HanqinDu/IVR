@@ -98,6 +98,47 @@ class MainReacher():
 
         return self.coordinate_convert_3D(np.array([cx,cy,cz]))
 
+    def detect_target(self,image_xy,image_xz,Vpeak):
+        mask_xy = cv2.inRange(image_xy, (0,0,(Vpeak*65/100)),(180,5,(Vpeak*75/100)))
+        mask_xz = cv2.inRange(image_xz, (0,0,(Vpeak*65/100)),(180,5,(Vpeak*75/100)))
+
+        imgXY,countour_XY, _ = cv2.findContours(mask_xy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        imgXZ,countour_XZ, _ = cv2.findContours(mask_xz, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        cxy1 = np.reshape(np.mean(countour_XY[0],0,dtype = np.int),2)
+        cxy2 = np.reshape(np.mean(countour_XY[1],0,dtype = np.int),2)
+        cxz1 = np.reshape(np.mean(countour_XZ[0],0,dtype = np.int),2)
+        cxz2 = np.reshape(np.mean(countour_XZ[1],0,dtype = np.int),2)
+
+
+        for i in range(5):
+            for j in range(5):
+                if(mask_xy[cxy1[1]+i][cxy1[0]+j] != mask_xy[cxy2[1]+i][cxy2[0]+j]):
+                    if(mask_xy[cxy1[1]+i][cxy1[0]+j] < mask_xy[cxy2[1]+i][cxy2[0]+j]):
+                        target_x = cxy1[0]
+                        target_y = cxy1[1]
+                        i = 10
+                    else:
+                        target_x = cxy2[0]
+                        target_y = cxy2[1]
+                        j = 10
+
+        for i in range(5):
+            for j in range(5):
+                if(mask_xz[cxz1[1]+i][cxz1[0]+j] != mask_xz[cxz2[1]+i][cxz2[0]+j]):
+                    if(mask_xz[cxz1[1]+i][cxz1[0]+j] < mask_xz[cxz2[1]+i][cxz2[0]+j]):
+                        target_x = (cxz1[0] + target_x)/2
+                        target_z = cxz1[1]
+                        i = 10
+                    else:
+                        target_x = (cxz2[0] + target_x)/2
+                        target_z = cxz2[1]
+                        j = 10
+
+        print(self.coordinate_convert_3D(np.array([target_x,target_y,target_z])))
+
+        return self.coordinate_convert_3D(np.array([target_x,target_y,target_z]))
+
     def FK(self,joint_angles):
         #Forward Kinematics to calculate end effector location
         #Each link is 1m long
@@ -211,6 +252,8 @@ class MainReacher():
     def rotation_matrix_w(self, angle, w):
         w_ = self.antisymmetric_matrix(w)
         return (np.eye(3) + w_*np.sin(angle) + w_*w_*(1-np.cos(angle)))
+
+
     #By Du
 
     #By eris
@@ -314,8 +357,6 @@ class MainReacher():
             # --------------------------------------------------------
             #velocity end
 
-            # test
-
             true_JV = self.env.ground_truth_joint_velocities
             true_ee = self.env.ground_truth_end_effector
             true_JA = self.env.ground_truth_joint_angles
@@ -325,15 +366,15 @@ class MainReacher():
             prev_JAs = detectedJointAngles
 
             ee_pos = self.FK(detectedJointAngles)[0:3,3]
-            #ee_pos = self.env.ground_truth_end_effector
             ee_vel = (np.array([true_ee[0],true_ee[1],true_ee[2]]) - prevEePos)/dt
             prevEePos = np.array([true_ee[0],true_ee[1],true_ee[2]])
 
-            #e_vel = np.dot(self.Jacobian(detectedJointAngles),detectedJointVels)
-
-            ee_target = [0,0,3]
+            ee_target = self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
 
             desiredJointAngles = true_JA+self.IK(true_JA,ee_target)
+
+            # test
+            #self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
 
             #J = self.Jacobian(true_JA)
             #edot = np.dot(J[0:3],detectedJointVels)
@@ -343,13 +384,6 @@ class MainReacher():
 
             # Etest
 
-            #jointAngles = np.array([-1.2,0.1,-0.7,2.2])#####du
-
-            #jointAngles = np.array([1.5,1.5,1.5,1.5])#####du
-
-            print("-------------------------")
-            print(detectedJointAngles)
-            print(true_JA)
 
             self.env.step((self.IK(detectedJointAngles,ee_target)/3, detectedJointVels, np.zeros(3), np.zeros(3)))
 
