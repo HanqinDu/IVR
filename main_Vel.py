@@ -22,8 +22,20 @@ class MainReacher():
         return np.array([(pixels[0]-self.env.viewerSize/2)/self.env.resolution,-(pixels[1]-self.env.viewerSize/2)/self.env.resolution])
 
     def angle_(self, v1, v2):
-        output = (np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
-        return output
+        safe = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        if(safe > 1):
+            safe = 1
+        if(safe<-1):
+            safe = -1
+
+        return (np.arccos(safe))
+        #output = (np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+
+    def ceil(self, v, c):
+        if(v>c):
+            return v
+        else:
+            return v
 
     def detect_green(self,image_xy,image_xz):
         #In this method you should focus on detecting the center of the green circle
@@ -164,6 +176,31 @@ class MainReacher():
         #Apply inverted jacobian on the position error in task space to get qdot
         q_dot = Jac_inv*np.matrix(pos_error).T
         return np.squeeze(np.array(q_dot.T))
+
+    def ts_pd_control(self, curr_ee_pos, curr_ee_vel, desired_ee_pos):
+        # Gain selection
+        P = np.array([200,200,200])
+        D = np.array([80,80,80])
+        # Proportional error
+        P_error = np.matrix(desired_ee_pos - curr_ee_pos).T
+        # Damping error
+        D_error = np.zeros(shape=(3,1)) - np.matrix(curr_ee_vel).T
+        # PD error
+        PD_error = np.diag(P)*P_error + np.diag(D)*D_error
+
+        return PD_error
+
+    def js_pd_control(self, current_joint_angles, current_joint_velocities, desired_joint_angles):
+        # Gain selection
+        P = np.array([150,150,150,150])
+        D = np.array([55,35,15,5])
+        # Proportional error
+        P_error = np.matrix(desired_joint_angles - current_joint_angles).T
+        # Damping error
+        D_error = np.matrix(np.zeros(4) - current_joint_velocities).T
+        # PD error
+        PD_error = np.diag(P)*P_error + np.diag(D)*D_error
+        return PD_error
 
     def link_transform_z(self,angle):
         #Calculate the Homogenoeous transformation matrix from rotation and translation
@@ -308,7 +345,7 @@ class MainReacher():
         #POS-IMG : Same control as POS, however you must provide the current joint angles and velocities : env.step((estimated joint angles, estimated joint velocities, desired joint angles, np.zeros(3)))
         #VEL : A joint space velocity control, the inputs require the joint angle error and joint velocities : env.step((joint angle error (velocity), estimated joint velocities, np.zeros(3), np.zeros(3)))
         #TORQUE : Provides direct access to the torque control on the robot : env.step((np.zeros(3),np.zeros(3),np.zeros(3),desired joint torques))
-        self.env.controlMode="VEL"
+        self.env.controlMode="TORQUE"
         #Run 100000 iterations
         prev_JAs = np.zeros(4)
         prev_jvs = collections.deque(np.zeros(4),1)
@@ -317,8 +354,12 @@ class MainReacher():
         # self.env.world.setGravity((0,0,-9.81))
 
         # test
-        prevEePos = np.zeros(shape=(1,3))
+        prevEePos = np.zeros(shape=(3,1))
+        ee_target_pre = np.zeros(shape=(3,1))
 
+        timeused = 0
+
+        switch = False
 
         for loop in range(100000):
 
@@ -363,27 +404,59 @@ class MainReacher():
             detectedJointVels = (sum(prev_jvs)/len(prev_jvs))/dt
             prev_JAs = detectedJointAngles
 
-            ee_pos = self.FK(detectedJointAngles)[0:3,3]
-            ee_vel = (np.array([true_ee[0],true_ee[1],true_ee[2]]) - prevEePos)/dt
-            prevEePos = np.array([true_ee[0],true_ee[1],true_ee[2]])
+            ee_pos = self.detect_ee(arrxy_HSV,arrxz_HSV,Vpeak)
+            ee_vel = (ee_pos - np.squeeze(np.array(prevEePos)))/dt
+            prevEePos = ee_pos
 
             ee_target = self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
 
-            desiredJointAngles = true_JA+self.IK(true_JA,ee_target)
+            switch = switch or (np.linalg.norm(ee_target - ee_target_pre) >= 0.2)
+
+            timeused += dt
+
+            if((np.linalg.norm(ee_target - ee_target_pre) >= 0.2)):
+                print timeused
+
+
+
+            ee_target_pre = ee_target
+
+            #desiredJointAngles = true_JA+self.IK(detectedJointAngles,ee_target)
+
+            #print(switch)
+            #print(desiredJointAngles)
+
+            J = self.Jacobian(detectedJointAngles)[0:3,:]
+
+            ee_desired_force = self.ts_pd_control(ee_pos, ee_vel, ee_target)
+            torques = J.T*ee_desired_force #+ grav_opposite_torques
+            #ee_desired_force = self.js_pd_control(detectedJointAngles, detectedJointVels, desiredJointAngles)
+
+            #torques = ee_desired_force + grav_opposite_torques
 
             # test
             #self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
 
             #J = self.Jacobian(true_JA)
             #edot = np.dot(J[0:3],detectedJointVels)
-
-            #print(desiredJointAngles)
             #print(true_ee)
 
+
             # Etest
+            if(np.linalg.norm(ee_pos-ee_target) <= 0.15):
+                ee_desired_force = self.js_pd_control(detectedJointAngles, detectedJointVels, detectedJointAngles)
+                self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),ee_desired_force))
+            else:
+                ee_desired_force = self.ts_pd_control(ee_pos, ee_vel, ee_target)
+                torques = J.T*ee_desired_force #+ grav_opposite_torques
+                self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),torques))
 
 
-            self.env.step((self.IK(detectedJointAngles,ee_target)/3, detectedJointVels, np.zeros(3), np.zeros(3)))
+            #if(np.dot(self.detect_red(arrxy_HSV,arrxz_HSV),ee_target) < 0):
+            #    self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),[torques[0]+50,torques[1],torques[2],torques[3]]))
+            #else:
+            #    self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),torques))
+
 
             #self.env.step((np.zeros(4),np.zeros(4),np.zeros(4), np.zeros(4)))
             #The step method will send the control input to the robot, the parameters are as follows: (Current Joint Angles/Error, Current Joint Velocities, Desired Joint Angles, Torque input)
