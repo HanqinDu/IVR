@@ -345,7 +345,7 @@ class MainReacher():
         #POS-IMG : Same control as POS, however you must provide the current joint angles and velocities : env.step((estimated joint angles, estimated joint velocities, desired joint angles, np.zeros(3)))
         #VEL : A joint space velocity control, the inputs require the joint angle error and joint velocities : env.step((joint angle error (velocity), estimated joint velocities, np.zeros(3), np.zeros(3)))
         #TORQUE : Provides direct access to the torque control on the robot : env.step((np.zeros(3),np.zeros(3),np.zeros(3),desired joint torques))
-        self.env.controlMode="TORQUE"
+        self.env.controlMode="VEL"
         #Run 100000 iterations
         prev_JAs = np.zeros(4)
         prev_jvs = collections.deque(np.zeros(4),1)
@@ -443,13 +443,18 @@ class MainReacher():
 
 
             # Etest
-            if(np.linalg.norm(ee_pos-ee_target) <= 0.15):
-                ee_desired_force = self.js_pd_control(detectedJointAngles, detectedJointVels, detectedJointAngles)
-                self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),ee_desired_force))
-            else:
-                ee_desired_force = self.ts_pd_control(ee_pos, ee_vel, ee_target)
-                torques = J.T*ee_desired_force #+ grav_opposite_torques
-                self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),torques))
+            if(self.env.controlMode is "TORQUE"):
+                if(np.linalg.norm(ee_pos-ee_target) <= 0.15):
+                    ee_desired_force = self.js_pd_control(detectedJointAngles, detectedJointVels, detectedJointAngles)
+                    self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),ee_desired_force))
+                else:
+                    ee_desired_force = self.ts_pd_control(ee_pos, ee_vel, ee_target)
+                    torques = J.T*ee_desired_force #+ grav_opposite_torques
+                    self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),torques))
+            if(self.env.controlMode is "VEL"):
+                desiredJointAngles = self.IK(detectedJointAngles,ee_target)
+                print(desiredJointAngles)
+                self.env.step((desiredJointAngles/3, true_JV, np.zeros(3), np.zeros(3)))
 
 
             #if(np.dot(self.detect_red(arrxy_HSV,arrxz_HSV),ee_target) < 0):
