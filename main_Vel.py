@@ -477,6 +477,7 @@ class MainReacher():
         #Run 100000 iterations
         prev_JAs = np.zeros(4)
         prev_jvs = collections.deque(np.zeros(4),1)
+        prev_djvs = collections.deque(np.zeros(4),1)
         prev_detectedJointVels = np.array([0,0,0,0])
 
         # Uncomment to have gravity act in the z-axis
@@ -541,8 +542,11 @@ class MainReacher():
             detectedJointVels = (sum(prev_jvs)/len(prev_jvs))/dt
             prev_JAs = detectedJointAngles
 
-            detectedJointAcc = (detectedJointVels - prev_detectedJointVels)/dt
+            #test
+            prev_djvs.append(self.angle_normalize(detectedJointVels-prev_detectedJointVels))
+            detectedJointAcc = (sum(prev_djvs)/len(prev_djvs))/dt
             prev_detectedJointVels = detectedJointVels
+
 
             ee_vel = (ee_pos - np.squeeze(np.array(prevEePos)))/dt
             prevEePos = ee_pos
@@ -564,6 +568,9 @@ class MainReacher():
             torques = J.T*ee_desired_force #+ grav_opposite_torques
 
             NE = (self.NE_pd_control(detectedJointAngles,detectedJointVels,detectedJointAcc))
+
+            print(detectedJointAcc)
+            print(detectedJointVels)
 
             if(self.env.controlMode is "TORQUE"):
                 if(np.linalg.norm(ee_pos-ee_target) <= 0.15):
