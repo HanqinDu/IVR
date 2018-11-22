@@ -662,6 +662,13 @@ class MainReacher():
         acJAD3 = 0
         acJAD4 = 0
 
+        acV1 = 0
+        acV2 = 0
+        acV3 = 0
+        acV4 = 0
+
+
+
         for loop in range(100000):
 
             #self.env.render returns 2 RGB arrays of the robot, one for the xy-plane, and one for the xz-plane
@@ -685,25 +692,6 @@ class MainReacher():
             detectedJointAngles = self.detect_joint_angles(arrxy_HSV,arrxz_HSV,Vpeak)
 
 
-
-
-            #velocity part [eris]
-            #The change in time between iterations can be found in the self.env.dt variable
-
-            # -------------------------------------------------------------------
-            #prev_JAs = np.zeros(4)
-            #dt = self.env.dt
-            #desiredJointAngles = np.array([-2*np.pi/3, np.pi/4, -np.pi/4, np.pi])
-
-            #detectedJointVels = self.angle_normalize(detectedJointAngles - prev_JAs)/dt
-            #prev_JAs = detectedJointAngles
-            #self.env.step((detectedJointAngles,detectedJointVels,desiredJointAngles,np.zeros(4)))
-
-            #print(self.env.ground_truth_joint_velocities - detectedJointVels)
-
-            # --------------------------------------------------------
-            #velocity end
-
             true_JV = self.env.ground_truth_joint_velocities
             true_ee = self.env.ground_truth_end_effector
             true_JA = self.env.ground_truth_joint_angles
@@ -720,6 +708,18 @@ class MainReacher():
 
             timeused += dt
 
+            # test
+            acJAD1 += np.abs(true_JA[0] - detectedJointAngles[0])
+            acJAD2 += np.abs(true_JA[1] - detectedJointAngles[1])
+            acJAD3 += np.abs(true_JA[2] - detectedJointAngles[2])
+            acJAD4 += np.abs(true_JA[3] - detectedJointAngles[3])
+
+            acV1 += np.abs(true_JV[0] - detectedJointVels[0])
+            acV2 += np.abs(true_JV[1] - detectedJointVels[1])
+            acV3 += np.abs(true_JV[2] - detectedJointVels[2])
+            acV4 += np.abs(true_JV[3] - detectedJointVels[3])
+            # Etest
+
             if(loop%6  == 0):
                 #ee_target = self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
                 ee_target = self.detect_target_classifier(arrxy_HSV,arrxz_HSV,test_classifier,Vpeak)
@@ -728,6 +728,8 @@ class MainReacher():
 
                 if((np.linalg.norm(ee_target - ee_target_pre) >= 0.2)):
                     print timeused
+                    print "angles errors:",np.array([acJAD1/loop,acJAD2/loop,acJAD3/loop,acJAD4/loop])
+                    print "velocity errors:",np.array([acV1/loop, acV2/loop, acV3/loop, acV4/loop])
 
                 ee_target_pre = ee_target
 
@@ -757,14 +759,6 @@ class MainReacher():
             if(self.env.controlMode is "VEL"):
                 desiredJointAngles = self.IK(detectedJointAngles,ee_target)
                 self.env.step((desiredJointAngles/3, true_JV, np.zeros(3), np.zeros(3)))
-
-            acJAD1 += np.abs(true_JA[0] - detectedJointAngles[0])/ np.abs(true_JA[0])
-            acJAD2 += np.abs(true_JA[1] - detectedJointAngles[1])/ np.abs(true_JA[1])
-            acJAD3 += np.abs(true_JA[2] - detectedJointAngles[2])/ np.abs(true_JA[2])
-            acJAD4 += np.abs(true_JA[3] - detectedJointAngles[3])/ np.abs(true_JA[3])
-
-            print(np.array([acJAD1/loop,acJAD2/loop,acJAD3/loop,acJAD4/loop]))
-
 
 
 
