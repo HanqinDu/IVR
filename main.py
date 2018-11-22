@@ -504,6 +504,10 @@ class MainReacher():
         XY2 = self.coordinate_convert(cxy2)
         XZ1 = self.coordinate_convert(cxz1)
         XZ2 = self.coordinate_convert(cxz2)
+        #print(XY1)
+        #print(XZ1)
+        #if(XY1 != XZ1):
+        #    XZ1 = XY1
 
         target1 = np.array([XY1[0],XY1[1],XZ1[1]])
         target2 = np.array([XY2[0],XY2[1],XZ2[1]])
@@ -528,7 +532,8 @@ class MainReacher():
 
         _, pred = classifier.classify('test.jpg')
         pred = pred[0][0]
-
+        print(target1)
+        print(target2)
         if (pred ==0):
             return target1
         else:
