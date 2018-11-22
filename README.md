@@ -133,3 +133,25 @@ fail 4
 success 1
 fail 5
 14.495
+
+0.005
+success 1
+fail 0
+2.375
+success 1
+fail 1
+4.355
+success 2
+fail 1
+6.275
+success 2
+fail 2
+8.585
+success 3
+fail 2
+11.675
+14.045
+14.075
+14.255
+14.285
+
