@@ -113,3 +113,23 @@ success 1
 fail 6
 20.765
 
+
+0.005
+success 0
+fail 1
+3.455
+success 0
+fail 2
+6.005
+success 0
+fail 3
+7.955
+success 1
+fail 3
+9.935
+success 1
+fail 4
+12.065
+success 1
+fail 5
+14.495
