@@ -318,7 +318,7 @@ class MainReacher():
         y = np.matrix([[0],[-1],[0]])
         t1 = y.T * n1
 
-        return np.array([t4,t3,t2,t1])
+        return np.array([t1,t2,t3,t4])
 
 
 
@@ -432,9 +432,6 @@ class MainReacher():
 
         return torques
 
-
-
-
     #By Du
 
 
@@ -467,12 +464,12 @@ class MainReacher():
         if((np.dot(np.cross(jointPos1,jointPos2-jointPos1),z_vector)) < 0):
             ja2 = -ja2
 
-        if((np.dot(np.cross(jointPos2,jointPos3-jointPos2),z_vector)) < 0):
+        if((np.dot(np.cross(jointPos2-jointPos1,jointPos3-jointPos2),z_vector)) < 0):
             ja3 = -ja3
 
         y_vector = y_vector*self.rotation_matrix_w(-ja2-ja3,z_vector)
 
-        if((np.dot(np.cross(jointPos3,jointPos4-jointPos3),np.array([y_vector[0,0],y_vector[0,1],y_vector[0,2]]))) < 0):
+        if((np.dot(np.cross(jointPos3-jointPos2,jointPos4-jointPos3),np.array([y_vector[0,0],y_vector[0,1],y_vector[0,2]]))) < 0):
             ja4 = -ja4
 
         return np.array([ja1,ja2,ja3,ja4])
@@ -498,19 +495,16 @@ class MainReacher():
         cxy2 = np.reshape(np.mean(countour_XY[1],0,dtype = np.int),2)
         cxz1 = np.reshape(np.mean(countour_XZ[0],0,dtype = np.int),2)
         cxz2 = np.reshape(np.mean(countour_XZ[1],0,dtype = np.int),2)
-        print("cxy",cxy1)
-        print(cxy2)
-        print(cxz1)
-        print(cxz2)
+
         #to form each coordinate
         XY1 = self.coordinate_convert(cxy1)
         XY2 = self.coordinate_convert(cxy2)
         XZ1 = self.coordinate_convert(cxz1)
         XZ2 = self.coordinate_convert(cxz2)
-        print("XY1",XY1)
-        print(XY2)
-        print(XZ1)
-        print(XZ2)
+        #print(XY1)
+        #print(XZ1)
+        #if(XY1 != XZ1):
+        #    XZ1 = XY1
 
         if np.abs(XY1[0]-XZ1[0]) <= np.abs([XY1[0]-XZ2[0]]):
             target1 = np.array([XY1[0],XY1[1],XZ1[1]])
@@ -518,7 +512,6 @@ class MainReacher():
         else:
             target1 = np.array([XY1[0],XY1[1],XZ2[1]])
             target2 = np.array([XY2[0],XY2[1],XZ1[1]])
-
 
         right=cxy1[0]+20
     	if right>np.shape(mask_xy)[1]:
@@ -645,13 +638,14 @@ class MainReacher():
         #POS-IMG : Same control as POS, however you must provide the current joint angles and velocities : env.step((estimated joint angles, estimated joint velocities, desired joint angles, np.zeros(3)))
         #VEL : A joint space velocity control, the inputs require the joint angle error and joint velocities : env.step((joint angle error (velocity), estimated joint velocities, np.zeros(3), np.zeros(3)))
         #TORQUE : Provides direct access to the torque control on the robot : env.step((np.zeros(3),np.zeros(3),np.zeros(3),desired joint torques))
-        self.env.controlMode="TORQUE"
+        self.env.controlMode="VEL"
         #Run 100000 iterations
         prev_JAs = np.zeros(4)
         prev_jvs = collections.deque(np.zeros(4),1)
 
         # Uncomment to have gravity act in the z-axis
-        self.env.world.setGravity((0,0,-9.81))
+        if(self.env.controlMode=="TORQUE"):
+            self.env.world.setGravity((0,0,-9.81))
 
         # test
         prevEePos = np.zeros(shape=(3,1))
@@ -736,25 +730,9 @@ class MainReacher():
 
             desiredJointAngles = true_JA+self.IK(detectedJointAngles,ee_target)
 
-            #print(switch)
-            #print(desiredJointAngles)
 
             J = self.Jacobian(detectedJointAngles)[0:3,:]
             grav_opposite_torques = self.gravity(detectedJointAngles)
-            #ee_desired_force = self.ts_pd_control(ee_pos, ee_vel, ee_target)
-            #torques = J.T*ee_desired_force + grav_opposite_torques
-            #ee_desired_force = self.js_pd_control(detectedJointAngles, detectedJointVels, desiredJointAngles)
-
-            #torques = ee_desired_force + grav_opposite_torques
-
-            # test
-            #self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
-
-            #J = self.Jacobian(true_JA)
-            #edot = np.dot(J[0:3],detectedJointVels)
-            #print(true_ee)
-
-
 
 
             # Etest
@@ -766,7 +744,7 @@ class MainReacher():
                     self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),ee_desired_force))
                 else:
                     ee_desired_force = self.ts_pd_control(ee_pos, ee_vel, ee_target)
-                    torques = J.T*ee_desired_force #+ grav_opposite_torques
+                    torques = J.T*ee_desired_force + grav_opposite_torques
                     NE = np.squeeze(NE) * 0.1
                     torques[0] = torques[0] + NE[3]
                     torques[1] = torques[1] + NE[2]
@@ -776,12 +754,6 @@ class MainReacher():
             if(self.env.controlMode is "VEL"):
                 desiredJointAngles = self.IK(detectedJointAngles,ee_target)
                 self.env.step((desiredJointAngles/3, true_JV, np.zeros(3), np.zeros(3)))
-
-
-            #if(np.dot(self.detect_red(arrxy_HSV,arrxz_HSV),ee_target) < 0):
-            #    self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),[torques[0]+50,torques[1],torques[2],torques[3]]))
-            #else:
-            #    self.env.step((np.zeros(3),np.zeros(3),np.zeros(3),torques))
 
 
             #self.env.step((np.zeros(4),np.zeros(4),np.zeros(4), np.zeros(4)))
