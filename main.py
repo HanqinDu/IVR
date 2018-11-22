@@ -413,22 +413,22 @@ class MainReacher():
         return (np.eye(3) + w_*np.sin(angle) + w_*w_*(1-np.cos(angle)))
 
     def smooth_torque(self,torques):
-        if (torques[0] > 2000):
-            torques[0] = 2000
-        if (torques[0] < -2000):
-            torques[0] = -2000
-        if (torques[1] > 1000):
-            torques[1] = 1000
-        if (torques[1] < -1000):
-            torques[1] = -1000
-        if (torques[2] > 500):
-            torques[2] = 500
-        if (torques[2] < -500):
-            torques[2] = -500
-        if (torques[3] > 200):
-            torques[3] = 200
-        if (torques[3] < -200):
-            torques[3] = -200
+        if (torques[0] > 3000):
+            torques[0] = 3000
+        if (torques[0] < -3000):
+            torques[0] = -3000
+        if (torques[1] > 1500):
+            torques[1] = 1500
+        if (torques[1] < -1500):
+            torques[1] = -1500
+        if (torques[2] > 800):
+            torques[2] = 800
+        if (torques[2] < -800):
+            torques[2] = -800
+        if (torques[3] > 300):
+            torques[3] = 300
+        if (torques[3] < -300):
+            torques[3] = -300
 
         return torques
 
@@ -527,14 +527,12 @@ class MainReacher():
     		up=0
 
         test_img=mask_xy[up:down, left:right]
-    	cv2.imwrite('test.jpg', test_img)
     	cv2.waitKey(0)
 
 
         _, pred = classifier.classify('test.jpg')
         pred = pred[0][0]
-        print(target1)
-        print(target2)
+
         if (pred ==0):
             return target1
         else:
@@ -638,7 +636,7 @@ class MainReacher():
         #POS-IMG : Same control as POS, however you must provide the current joint angles and velocities : env.step((estimated joint angles, estimated joint velocities, desired joint angles, np.zeros(3)))
         #VEL : A joint space velocity control, the inputs require the joint angle error and joint velocities : env.step((joint angle error (velocity), estimated joint velocities, np.zeros(3), np.zeros(3)))
         #TORQUE : Provides direct access to the torque control on the robot : env.step((np.zeros(3),np.zeros(3),np.zeros(3),desired joint torques))
-        self.env.controlMode="VEL"
+        self.env.controlMode="TORQUE"
         #Run 100000 iterations
         prev_JAs = np.zeros(4)
         prev_jvs = collections.deque(np.zeros(4),1)
@@ -714,19 +712,18 @@ class MainReacher():
             ee_vel = (ee_pos - np.squeeze(np.array(prevEePos)))/dt
             prevEePos = ee_pos
 
-            #ee_target = self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
-            ee_target = self.detect_target_classifier(arrxy_HSV,arrxz_HSV,test_classifier,Vpeak)
-
-            switch = switch or (np.linalg.norm(ee_target - ee_target_pre) >= 0.2)
-
             timeused += dt
 
-            if((np.linalg.norm(ee_target - ee_target_pre) >= 0.2)):
-                print timeused
+            if(loop%6  == 0):
+                #ee_target = self.detect_target(arrxy_HSV,arrxz_HSV,Vpeak)
+                ee_target = self.detect_target_classifier(arrxy_HSV,arrxz_HSV,test_classifier,Vpeak)
 
+                switch = switch or (np.linalg.norm(ee_target - ee_target_pre) >= 0.2)
 
+                if((np.linalg.norm(ee_target - ee_target_pre) >= 0.2)):
+                    print timeused
 
-            ee_target_pre = ee_target
+                ee_target_pre = ee_target
 
             desiredJointAngles = true_JA+self.IK(detectedJointAngles,ee_target)
 
