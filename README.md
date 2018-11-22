@@ -21,3 +21,14 @@ fail 1
 success 2
 fail 2
 12.105
+
+0.005
+success 0
+fail 1
+2.435
+success 0
+fail 2
+4.925
+success 0
+fail 3
+6.995
