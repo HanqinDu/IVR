@@ -656,6 +656,12 @@ class MainReacher():
         test_classifier = classifier.main()
         prev_detectedJointVels = np.array([0,0,0,0])
 
+        #test
+        acJAD1 = 0
+        acJAD2 = 0
+        acJAD3 = 0
+        acJAD4 = 0
+
         for loop in range(100000):
 
             #self.env.render returns 2 RGB arrays of the robot, one for the xy-plane, and one for the xz-plane
@@ -751,6 +757,15 @@ class MainReacher():
             if(self.env.controlMode is "VEL"):
                 desiredJointAngles = self.IK(detectedJointAngles,ee_target)
                 self.env.step((desiredJointAngles/3, true_JV, np.zeros(3), np.zeros(3)))
+
+            acJAD1 += np.abs(true_JA[0] - detectedJointAngles[0])/ np.abs(true_JA[0])
+            acJAD2 += np.abs(true_JA[1] - detectedJointAngles[1])/ np.abs(true_JA[1])
+            acJAD3 += np.abs(true_JA[2] - detectedJointAngles[2])/ np.abs(true_JA[2])
+            acJAD4 += np.abs(true_JA[3] - detectedJointAngles[3])/ np.abs(true_JA[3])
+
+            print(np.array([acJAD1/loop,acJAD2/loop,acJAD3/loop,acJAD4/loop]))
+
+
 
 
             #self.env.step((np.zeros(4),np.zeros(4),np.zeros(4), np.zeros(4)))
