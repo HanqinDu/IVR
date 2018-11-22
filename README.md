@@ -88,3 +88,28 @@ fail 5
 26.555
 angles errors: [0.01884443 0.03338141 0.05875407 0.00732029]
 velocity errors: [0.61602227 0.89501204 0.96717293 1.43722229]
+
+
+0.005
+success 0
+fail 1
+2.195
+success 0
+fail 2
+5.465
+success 0
+fail 3
+7.505
+success 0
+fail 4
+14.075
+success 0
+fail 5
+16.235
+success 0
+fail 6
+18.785
+success 1
+fail 6
+20.765
+
