@@ -498,19 +498,27 @@ class MainReacher():
         cxy2 = np.reshape(np.mean(countour_XY[1],0,dtype = np.int),2)
         cxz1 = np.reshape(np.mean(countour_XZ[0],0,dtype = np.int),2)
         cxz2 = np.reshape(np.mean(countour_XZ[1],0,dtype = np.int),2)
-
+        print("cxy",cxy1)
+        print(cxy2)
+        print(cxz1)
+        print(cxz2)
         #to form each coordinate
         XY1 = self.coordinate_convert(cxy1)
         XY2 = self.coordinate_convert(cxy2)
         XZ1 = self.coordinate_convert(cxz1)
         XZ2 = self.coordinate_convert(cxz2)
-        #print(XY1)
-        #print(XZ1)
-        #if(XY1 != XZ1):
-        #    XZ1 = XY1
+        print("XY1",XY1)
+        print(XY2)
+        print(XZ1)
+        print(XZ2)
 
-        target1 = np.array([XY1[0],XY1[1],XZ1[1]])
-        target2 = np.array([XY2[0],XY2[1],XZ2[1]])
+        if np.abs(XY1[0]-XZ1[0]) <= np.abs([XY1[0]-XZ2[0]]):
+            target1 = np.array([XY1[0],XY1[1],XZ1[1]])
+            target2 = np.array([XY2[0],XY2[1],XZ2[1]])
+        else:
+            target1 = np.array([XY1[0],XY1[1],XZ2[1]])
+            target2 = np.array([XY2[0],XY2[1],XZ1[1]])
+
 
         right=cxy1[0]+20
     	if right>np.shape(mask_xy)[1]:
